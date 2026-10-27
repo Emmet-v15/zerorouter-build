@@ -1,6 +1,5 @@
-# game-route-watcher-build
+# zerorouter-build
 
-Windows builds for game-route-watcher. The source is not stored here; each
-run checks it out using a read-only key and executes only when triggered
-manually (workflow_dispatch). The release build's exe is encrypted before
-upload.
+Windows builds for zerorouter. The source isn’t stored here; each run
+checks it out with a read-only key and only runs when manually triggered
+(workflow_dispatch). The release build’s exe is encrypted before upload.

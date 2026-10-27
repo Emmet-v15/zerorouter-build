@@ -1,14 +1,14 @@
 name: build
 
-# game-route-watcher’s CI and release builds execute on a free Windows runner.
-# This repository is public, whereas the app’s repository is private (its own
-# Actions minutes are paid). The source is not stored here; each run checks it
-# out using a read-only deploy key (secrets SRC_REPO / SRC_KEY). Runs start
-# only via workflow_dispatch, from the app’s scripts/ci.sh and
-# scripts/publish.sh: nothing triggers on pull requests, so outside code never
-# reaches the key. Logs display only error lines. A release build’s exe is
-# encrypted with ARTIFACT_KEY and retained for one day; it is signed into the
-# update manifest on the owner’s machine, never here.
+# zerorouter’s CI and release builds run on a free Windows runner. This
+# repository is public, but the app’s repository is private (paid Actions
+# minutes). The source is not stored here; each run checks it out using a
+# read-only deploy key (secrets SRC_REPO / SRC_KEY). Runs start only via
+# workflow_dispatch, from the app’s scripts/ci.sh and scripts/publish.sh:
+# nothing triggers on pull requests, so outside code never reaches the key.
+# Logs display only error lines. A release build’s exe is encrypted with
+# ARTIFACT_KEY and retained for one day; it is signed into the update manifest
+# on the owner’s machine, never here.
 #
 # This file's source of truth is the app's ops/builder/build.yml.
 
@@ -68,9 +68,9 @@ jobs:
           V15_BUILD_ID: ${{ inputs.build }}
         run: |
           case "$V15_BUILD_ID" in *[!0-9]*) echo "build id must be digits"; exit 1;; esac
-          cargo build --release --locked -p game-route-watcher-app > ../build.log 2>&1 || { grep -E "^error" ../build.log | head -20; exit 1; }
+          cargo build --release --locked -p zerorouter-app > ../build.log 2>&1 || { grep -E "^error" ../build.log | head -20; exit 1; }
           mkdir -p ../out
-          cp target/release/game-route-watcher.exe ../out/
+          cp target/release/zerorouter.exe ../out/
       - name: encrypt
         if: inputs.build != ''
         working-directory: out
