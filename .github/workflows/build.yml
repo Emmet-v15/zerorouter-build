@@ -1,0 +1,86 @@
+name: build
+
+# game-route-watcher’s CI and release builds execute on a free Windows runner.
+# This repository is public, whereas the app’s repository is private (its own
+# Actions minutes are paid). The source is not stored here; each run checks it
+# out using a read-only deploy key (secrets SRC_REPO / SRC_KEY). Runs start
+# only via workflow_dispatch, from the app’s scripts/ci.sh and
+# scripts/publish.sh: nothing triggers on pull requests, so outside code never
+# reaches the key. Logs display only error lines. A release build’s exe is
+# encrypted with ARTIFACT_KEY and retained for one day; it is signed into the
+# update manifest on the owner’s machine, never here.
+#
+# This file's source of truth is the app's ops/builder/build.yml.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: the app's commit (or branch)
+        default: main
+      build:
+        description: build id for a release exe (empty, check only)
+        default: ''
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: never
+  CARGO_TERM_QUIET: 'true'
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: src
+    steps:
+      - name: Defender off (a throwaway runner)
+        shell: pwsh
+        working-directory: .
+        run: |
+          try { Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction Stop } catch { "Defender stays on" }
+      - uses: actions/checkout@v5
+        with:
+          repository: ${{ secrets.SRC_REPO }}
+          ref: ${{ inputs.ref }}
+          ssh-key: ${{ secrets.SRC_KEY }}
+          path: src
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src
+      # each step saves its full output to a file and displays only error
+      # lines
+      - name: format
+        run: cargo fmt --all --check > ../fmt.log 2>&1 || { grep -E "^Diff in" ../fmt.log | head -20; exit 1; }
+      - name: clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings > ../clippy.log 2>&1 || { grep -E "^(error|warning)|^ *--> " ../clippy.log | head -40; exit 1; }
+      - name: test
+        run: |
+          cargo test --workspace --locked > ../test.log 2>&1 && { grep -E "^test result" ../test.log; exit 0; }
+          grep -E "^test .* FAILED|panicked at|^error|^test result" ../test.log | head -40
+          exit 1
+      - name: release exe
+        if: inputs.build != ''
+        env:
+          V15_BUILD_ID: ${{ inputs.build }}
+        run: |
+          case "$V15_BUILD_ID" in *[!0-9]*) echo "build id must be digits"; exit 1;; esac
+          cargo build --release --locked -p game-route-watcher-app > ../build.log 2>&1 || { grep -E "^error" ../build.log | head -20; exit 1; }
+          mkdir -p ../out
+          cp target/release/game-route-watcher.exe ../out/
+      - name: encrypt
+        if: inputs.build != ''
+        working-directory: out
+        env:
+          K: ${{ secrets.ARTIFACT_KEY }}
+        run: for f in *; do openssl enc -aes-256-cbc -md sha256 -pbkdf2 -iter 100000 -salt -in "$f" -out "$f.enc" -pass env:K && rm "$f"; done
+      - uses: actions/upload-artifact@v4
+        if: inputs.build != ''
+        with:
+          name: windows
+          path: out/*
+          retention-days: 1
+          if-no-files-found: error
